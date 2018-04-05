@@ -25,6 +25,13 @@ namespace QRCodeTest
             qrScanner.ScanAsync();
         }
 
+        protected override async void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            base.OnNavigatedFrom(e);
+
+            await qrScanner?.StopScanAsync();
+        }
+
         private async void QrScanner_QrScanned(object sender, QrScanner.QrScannerEventArgs e)
         {
             await new MessageDialog(e.Data).ShowAsync();

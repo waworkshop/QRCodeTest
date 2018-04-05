@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 using Windows.Media.MediaProperties;
 using Windows.Media;
 using Windows.Graphics.Imaging;
+using Windows.Graphics.Display;
+using Windows.System.Display;
 
 namespace QRCodeTest
 {
@@ -40,6 +42,7 @@ namespace QRCodeTest
 
         DispatcherTimer timer;
         BarcodeReader reader;
+        DisplayRequest displayRequest = new DisplayRequest();
 
         private VideoEncodingProperties previewProperties;
 
@@ -57,6 +60,7 @@ namespace QRCodeTest
             if (this.mediaCapture != null)
             {
                 this.PreviewControl.Source = mediaCapture;
+                displayRequest.RequestActive();
                 previewProperties = mediaCapture.VideoDeviceController.GetMediaStreamProperties(MediaStreamType.VideoPreview) as VideoEncodingProperties;
                 await mediaCapture.StartPreviewAsync();
                 int w = (int)previewProperties.Width, h = (int)previewProperties.Height;
@@ -92,23 +96,45 @@ namespace QRCodeTest
         void StartScanner()
         {
             tickCount = 0;
+            
             this.timer.Start();
         }
 
-        public void StopScan()
+        public async Task StopScanAsync()
         {
             _scanStarted = false;
             if (this.timer != null && this.timer.IsEnabled)
             {
                 this.timer.Stop();
             }
+            if(mediaCapture != null)
+            {
+                await mediaCapture.StopPreviewAsync();
+                PreviewControl.Source = null;
+                if (displayRequest != null)
+                {
+                    displayRequest.RequestRelease();
+                }
+
+                mediaCapture.Dispose();
+                mediaCapture = null;
+            }
         }
 
         int tickCount = 0;
         bool focusing_ = false;
+        bool capturing = false;
 
         private async void Timer_Tick(object sender, object e)
         {
+            lock (this)
+            {
+                if (capturing)
+                {
+                    return;
+                }
+                capturing = true;
+            }
             if (_cameraState == CameraLoadedState.Loaded)
             {
                 var videoFrame = new VideoFrame(BitmapPixelFormat.Bgra8, (int)previewProperties.Width, (int)previewProperties.Height);
@@ -166,6 +192,7 @@ namespace QRCodeTest
                 }
 
                 this.tickCount++;
+                capturing = false;
             }
         }
 
@@ -175,6 +202,7 @@ namespace QRCodeTest
 
             mediaCapture = new MediaCapture();
             await mediaCapture.InitializeAsync();
+            DisplayInformation.AutoRotationPreferences = DisplayOrientations.Landscape;
             mediaCapture.VideoDeviceController.FocusControl.Configure(new Windows.Media.Devices.FocusSettings
             {
                 Mode = Windows.Media.Devices.FocusMode.Auto
